@@ -1,0 +1,13 @@
+all: Brazo
+
+BrazoRobotico.o: BrazoRobotico.cpp BrazoRobotico.h
+	g++ -c BrazoRobotico.cpp
+
+Brazo.o: main.cpp BrazoRobotico.h
+	g++ -c main.cpp
+
+Brazo: Brazo.o BrazoRobotico.o
+	g++ -o Brazo Brazo.o BrazRobotico.o
+
+clean:
+	rm -f *.o Brazo
