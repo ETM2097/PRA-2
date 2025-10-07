@@ -117,6 +117,10 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
     }
     pid_t primer_pid = -1; // Guardamos el PID del primer proceso para el tracking de background
     // Proseguimos a crear los procesos hijos si hay más de una orden o no es un comando interno
+    if (bgnd){
+        pid_t padre = fork();
+        if (padre > 0) return OK;
+    }
     for (int i = 0; i < nordenes; i++) {
         pid_t pid = fork();
         
@@ -134,45 +138,13 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
             perror("execvp");
             exit(ERROR);
         }
-        else {
-            // Padre: guardar el PID del primer proceso
-            if (i == 0) {
-                primer_pid = pid;
-            }
-        }
     }
     // El padre tras crear a todos los hijos cierra los pipes y espera a que terminen si no es background
     cerrar_fd();
-    // SI es background, añadimos el proceso a la lista de bg
-    if (bgnd && primer_pid > 0) {
-        // Construir el comando completo para mostrar
-        char comando_completo[1024];
-        comando_completo[0] = '\0'; // Asegurar que empieza vacío
-        
-        // Usamos strcat para construir el comando completo con sus argumentos
-        for (int i = 0; i < nordenes; i++) {
-            if (i > 0) {
-                strcat(comando_completo, " | "); // Pipeline separator
-            }
-            strcat(comando_completo, ordenes[i]);
-            for (int j = 1; j < nargs[i]; j++) {
-                strcat(comando_completo, " ");
-                if (args[i][j] != NULL) {
-                    strcat(comando_completo, args[i][j]);
-                }
-            }
-        }
-        // Registrar en el sistema de tracking
-        agregar_proceso_bg(primer_pid, comando_completo);
+    for (int i = 0; i < nordenes; i++) {
+        wait(NULL);
     }
-    // Finalmente esperamos a que terminen los procesos hijos si no estamos en background
-        if (!bgnd) {
-            // Por lo que he leido, da igual si un hijo termina antes que el padre llegue a esta función, ya que el wait lo recoge aunque esté en estado de zombie
-            // Así que simplemente hacemos un wait nordenes veces
-            for (int i = 0; i < nordenes; i++) {
-                wait(NULL);
-            }
-        }
+
         // Si estamos en background, no esperamos y devolvemos el control inmediatamente, init será el encargado de recoger los huerfanos si el padre termina antes, si no, solo quedan en estado zombie hasta que el padre termina
     return OK;
 } 

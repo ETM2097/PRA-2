@@ -59,7 +59,8 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
                     return ERROR;
                 }
                 red_ordenes[i].entrada = fd_in;
-            } 
+            }
+            /*
             else if (bgnd == 1) {
                 int fd_in = open("/dev/null", O_RDONLY);
                 if (fd_in < 0) {
@@ -67,7 +68,7 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
                     return ERROR;
                 }
                 red_ordenes[i].entrada = fd_in;
-            } 
+            } */
             else {
                 red_ordenes[i].entrada = STDIN_FILENO;
             }
