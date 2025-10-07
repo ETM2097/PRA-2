@@ -8,9 +8,12 @@
 #include "redireccion.h"
 #include "ejecucion.h"
 #include "profe.h"
+#include "analizador.h"
 #include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+#include "background_check.h"
 
 // Función para verificar si es comando interno
 int es_orden_interna(char *orden) {
@@ -21,6 +24,9 @@ int es_orden_interna(char *orden) {
     return 0;
 }
 
+// He optado por no usar throw y catch para manejar errores, ya que en C no es común y complica el código innecesariamente
+// En su lugar, las funciones devuelven códigos de error y se usan perror y fprintf para mostrar mensajes de error, perror muestra el mensaje asociado al valor de errno 
+// por lo que es menos personalizable, mientras que fprintf permite mostrar mensajes personalizados en stderr
 
 int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bgnd)
 {
@@ -35,11 +41,37 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
         switch (caso) {
             case 1: // cd
                 if (nargs[0] < 2) {
-                    // Usamos fprintf para enviar mensaje de error a stderr (esto ayuda a la realización de pruebas ya que separa la salida standard "stdout" de los errores "stderr")
-                    fprintf(stderr, "El comando cd requiere de un argumento\n");
-                    cerrar_fd();
-                    return ERROR;
+                    // Si no hay argumento, cambiamos al directorio home
+                    const char *home = getenv("HOME");
+                    if (home == NULL) {
+                        // Si no se puede obtener el home, mostramos un error
+                        // Usamos fprintf para mostrar el error en stderr
+                        fprintf(stderr, "No se pudo obtener el directorio home\n");
+                        cerrar_fd();
+                        return ERROR;
+                    }
+                    if (chdir(home) != 0) {
+                        perror("chdir");
+                        cerrar_fd();
+                        return ERROR;
+                    }
                 }
+                /*
+                else if (strcmp(args[0][1], "-") == 0) {
+                    // Si el argumento es '-', cambiamos al directorio anterior
+                    if (cd_prev_dir != NULL && *cd_prev_dir != NULL) {
+                        if (chdir(*cd_prev_dir) != 0) {
+                            perror("chdir");
+                            cerrar_fd();
+                            return ERROR;
+                        }
+                    }
+                    else {
+                        fprintf(stderr, "No hay directorio previo\n");
+                        cerrar_fd();
+                        return ERROR;
+                    }
+                }*/
                 else {
                     // chdir cambia el directorio actual del proceso, que es lo que queremos para el comando cd
                     if (chdir(args[0][1]) != 0) {
@@ -83,12 +115,18 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
         cerrar_fd();
         return OK;
     }
-
-    // Proseguimos a crear los procesos hijos
+    pid_t primer_pid = -1; // Guardamos el PID del primer proceso para el tracking de background
+    // Proseguimos a crear los procesos hijos si hay más de una orden o no es un comando interno
     for (int i = 0; i < nordenes; i++) {
         pid_t pid = fork();
-        if (pid == 0) {
-            // Hijo
+        
+        if (pid < 0) {
+            // Error al crear el proceso
+            perror("fork");
+            cerrar_fd();
+            return ERROR;
+        }
+        else if (pid == 0) {
             redirigir_entrada(i);
             redirigir_salida(i);
             cerrar_fd();
@@ -96,10 +134,38 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
             perror("execvp");
             exit(ERROR);
         }
+        else {
+            // Padre: guardar el PID del primer proceso
+            if (i == 0) {
+                primer_pid = pid;
+            }
+        }
     }
     // El padre tras crear a todos los hijos cierra los pipes y espera a que terminen si no es background
     cerrar_fd();
-        // Finalmente esperamos a que terminen los procesos hijos si no estamos en background
+    // SI es background, añadimos el proceso a la lista de bg
+    if (bgnd && primer_pid > 0) {
+        // Construir el comando completo para mostrar
+        char comando_completo[1024];
+        comando_completo[0] = '\0'; // Asegurar que empieza vacío
+        
+        // Usamos strcat para construir el comando completo con sus argumentos
+        for (int i = 0; i < nordenes; i++) {
+            if (i > 0) {
+                strcat(comando_completo, " | "); // Pipeline separator
+            }
+            strcat(comando_completo, ordenes[i]);
+            for (int j = 1; j < nargs[i]; j++) {
+                strcat(comando_completo, " ");
+                if (args[i][j] != NULL) {
+                    strcat(comando_completo, args[i][j]);
+                }
+            }
+        }
+        // Registrar en el sistema de tracking
+        agregar_proceso_bg(primer_pid, comando_completo);
+    }
+    // Finalmente esperamos a que terminen los procesos hijos si no estamos en background
         if (!bgnd) {
             // Por lo que he leido, da igual si un hijo termina antes que el padre llegue a esta función, ya que el wait lo recoge aunque esté en estado de zombie
             // Así que simplemente hacemos un wait nordenes veces

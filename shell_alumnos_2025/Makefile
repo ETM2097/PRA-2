@@ -10,8 +10,8 @@ all: ush
 
 todo: ush 
 
-ush: ush.c defines.h analizador.h redireccion.h $(lib_file) analizador.o redireccion.o ejecucion.o visualizado.o
-	gcc ush.c $(lib_file) analizador.o redireccion.o ejecucion.o visualizado.o -o ush
+ush: ush.c defines.h analizador.h redireccion.h background_check.h $(lib_file) analizador.o redireccion.o ejecucion.o visualizado.o background_check.o
+	gcc ush.c $(lib_file) analizador.o redireccion.o ejecucion.o visualizado.o background_check.o -o ush
 	strip ush
 
 analizador.o: analizador.c defines.h
@@ -23,8 +23,11 @@ visualizado.o: visualizado.c defines.h
 redireccion.o: redireccion.c defines.h
 	gcc -c redireccion.c
 
-ejecucion.o: ejecucion.c defines.h analizador.c redireccion.h
+ejecucion.o: ejecucion.c defines.h analizador.c redireccion.h background_check.h
 	gcc -c ejecucion.c
+
+background_check.o: background_check.c background_check.h
+	gcc -c background_check.c
 
 clean:
 	rm *.o ush 

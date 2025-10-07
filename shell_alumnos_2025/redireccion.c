@@ -79,8 +79,9 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
 
         // SALIDA: Configuramos la salida para el comando i
         if (i == nordenes - 1) {
-            // Si es el último comando: usamos outfile o stdout
+            // Si es el último comando: usamos outfile o stdout/dev/null
             if (strcmp(outfile, "") != 0) {
+                // HAY redirección explícita, usarla
                 if (append) {
                     int fd_out = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0644);
                     if (fd_out < 0) {
@@ -97,7 +98,17 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
                     red_ordenes[i].salida = fd_out;
                 }
             } 
+            else if (bgnd == 1) {
+                // NO hay redirección Y es background -> /dev/null
+                int fd_out = open("/dev/null", O_WRONLY);
+                if (fd_out < 0) {
+                    perror("open /dev/null");
+                    return ERROR;
+                }
+                red_ordenes[i].salida = fd_out;
+            }
             else {
+                // NO hay redirección Y es foreground -> stdout
                 red_ordenes[i].salida = STDOUT_FILENO;
             }
         } 
