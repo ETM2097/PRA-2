@@ -32,7 +32,8 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
 {
     int i;
     pid_t pid;
-    
+    char cmds[nordenes][256];
+    pid_t pids[nordenes]; // Array para almacenar los PIDs de los procesos hijos
     // Manejamos si es un comando interno
     int caso = es_orden_interna(ordenes[0]);
     if (nordenes == 1 && caso != 0) {
@@ -115,7 +116,19 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
         cerrar_fd();
         return OK;
     }
-    pid_t primer_pid = -1; // Guardamos el PID del primer proceso para el tracking de background
+    if (bgnd){
+        pid_t pid_f = fork();
+        if (pid_f < 0) {
+            // Error al crear el proceso
+            perror("fork");
+            cerrar_fd();
+            return ERROR;
+        }
+        else if (pid_f != 0){
+            cerrar_fd();
+            return OK; // El padre no espera al hijo
+        }
+    }
     // Proseguimos a crear los procesos hijos si hay más de una orden o no es un comando interno
     for (int i = 0; i < nordenes; i++) {
         pid_t pid = fork();
@@ -127,6 +140,7 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
             return ERROR;
         }
         else if (pid == 0) {
+            // Proceso hijo
             redirigir_entrada(i);
             redirigir_salida(i);
             cerrar_fd();
@@ -135,44 +149,50 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
             exit(ERROR);
         }
         else {
-            // Padre: guardar el PID del primer proceso
-            if (i == 0) {
-                primer_pid = pid;
-            }
-        }
-    }
-    // El padre tras crear a todos los hijos cierra los pipes y espera a que terminen si no es background
-    cerrar_fd();
-    // SI es background, añadimos el proceso a la lista de bg
-    if (bgnd && primer_pid > 0) {
-        // Construir el comando completo para mostrar
-        char comando_completo[1024];
-        comando_completo[0] = '\0'; // Asegurar que empieza vacío
-        
-        // Usamos strcat para construir el comando completo con sus argumentos
-        for (int i = 0; i < nordenes; i++) {
-            if (i > 0) {
-                strcat(comando_completo, " | "); // Pipeline separator
-            }
-            strcat(comando_completo, ordenes[i]);
-            for (int j = 1; j < nargs[i]; j++) {
-                strcat(comando_completo, " ");
-                if (args[i][j] != NULL) {
-                    strcat(comando_completo, args[i][j]);
+            // Proceso padre (supervisor)
+            if (bgnd) {
+                // Construimos la cadena del comando con sus argumentos
+                char cmd[512];
+                cmd[0] = '\0';
+                strcat(cmd, ordenes[i]);
+                for (int j = 1; j < nargs[i]; j++) {
+                    strcat(cmd, " ");
+                    if (args[i][j] != NULL) {
+                        strcat(cmd, args[i][j]);
+                    }
                 }
+                strcpy(cmds[i], cmd);
+                pids[i] = pid;
             }
         }
-        // Registrar en el sistema de tracking
-        agregar_proceso_bg(primer_pid, comando_completo);
     }
-    // Finalmente esperamos a que terminen los procesos hijos si no estamos en background
-        if (!bgnd) {
-            // Por lo que he leido, da igual si un hijo termina antes que el padre llegue a esta función, ya que el wait lo recoge aunque esté en estado de zombie
-            // Así que simplemente hacemos un wait nordenes veces
-            for (int i = 0; i < nordenes; i++) {
+    
+    // El padre (o supervisor) tras crear a todos los hijos cierra los pipes
+    cerrar_fd();
+
+    // Si es background, ha llegado aquí el proceso supervisor, que manejará la espera y mostrará los mensajes de terminación de sus hijos
+        if (bgnd) {
+            int status;
+            int cont = 0;
+            while(cont < nordenes){
+                pid_t end = waitpid(pids[cont], &status, 0);
+                
+                if (end == pids[cont]) {
+                    mostrar_terminacion(status, cmds[cont]);
+                } else if (end == -1) {
+                    perror("waitpid");
+                }
+                
+                cont++;
+            }
+            exit(0);
+        }
+    // Si no es en background, el padre espera a que terminen todos los hijos
+        else {
+            for (int k = 0; k < nordenes; k++) {
                 wait(NULL);
             }
-        }
-        // Si estamos en background, no esperamos y devolvemos el control inmediatamente, init será el encargado de recoger los huerfanos si el padre termina antes, si no, solo quedan en estado zombie hasta que el padre termina
+        }   
+    // Return OK si todo ha ido bien, solo debería llegar aquí el proceso padre
     return OK;
 } 

@@ -16,7 +16,7 @@ REDIRECCION_ORDENES red_ordenes;
 
 void redireccion_ini(void)
 {
-    for (int i = 0; i < PIPELINE - 1; ++i){
+    for (int i = 0; i < PIPELINE; ++i){
         red_ordenes[i].entrada = 0;
         red_ordenes[i].salida = 0;
     }
@@ -78,7 +78,7 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
         }
 
         // SALIDA: Configuramos la salida para el comando i
-        if (i == nordenes - 1) {
+    if (i == nordenes - 1) {
             // Si es el último comando: usamos outfile o stdout/dev/null
             if (strcmp(outfile, "") != 0) {
                 // HAY redirección explícita, usarla
@@ -98,15 +98,6 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
                     red_ordenes[i].salida = fd_out;
                 }
             } 
-            else if (bgnd == 1) {
-                // NO hay redirección Y es background -> /dev/null
-                int fd_out = open("/dev/null", O_WRONLY);
-                if (fd_out < 0) {
-                    perror("open /dev/null");
-                    return ERROR;
-                }
-                red_ordenes[i].salida = fd_out;
-            }
             else {
                 // NO hay redirección Y es foreground -> stdout
                 red_ordenes[i].salida = STDOUT_FILENO;
@@ -147,8 +138,8 @@ int redirigir_salida(int i)
 int cerrar_fd()
 {
     // Cerramos todos los descriptores de archivo en red_ordenes
-    // El array red_ordenes tiene tamaño PIPELINE-1, así que vamos de 0 a PIPELINE-2
-    for (int i = 0; i < PIPELINE - 1; ++i) {
+    // El array red_ordenes tiene tamaño PIPELINE, así que vamos de 0 a PIPELINE-1
+    for (int i = 0; i < PIPELINE; ++i) {
         // Cerramos el descriptor de archivo de entrada si es mayor a 2
         if (red_ordenes[i].entrada > STDERR_FILENO) {
             close(red_ordenes[i].entrada);

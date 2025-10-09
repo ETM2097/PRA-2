@@ -41,14 +41,12 @@ int main(int argc, char * argv[])
   char ***m_argumentos;
   int *m_num_arg;
   int m_n;
-
-  init_procesos_bg();
+  
   while(1)
   {
     setlocale(LC_ALL, "");
     while(1)
     {
-      verificar_procesos_bg(); // Verificamos si hay procesos en background que hayan terminado
       do
       {
           res=leerLinea(line,MAXLINE);    

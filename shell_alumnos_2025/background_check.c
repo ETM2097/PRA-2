@@ -1,6 +1,15 @@
 #include "background_check.h"
 #include <string.h>
 
+// Dejo todo el código creado aquí, aunque finalmente solamente se vaya a usar la función mostrar_terminación y no vaya a utilizar la estructura de procesos en background
+// La estructura y funciones para manejar procesos en background pueden ser útiles para futuras mejoras del shell
+// Aunque de momento no se implementarlas para que al finalizar el background se impriman los mensajes de terminación
+// Ya que verificar_procesos_bg() solo la puedo llamar en el proceso padre y se ejecuta en la siguiente iteración del bucle principal del shell
+// Haciendo que los programas hijos en background no muestren el mensaje de terminación inmediatamente al finalizar
+// Siendo zombies hasta que el padre los maneje, esto según he visto es debido a que al generar una copia de la estructura de procesos en background en el fork del hijo
+// El hijo no puede modificar la estructura del padre, y al llamar el hijo a verificar_procesos_bg() no encuentra su PID en la estructura del padre
+// Seguiré investigando este comportamiento para futuras versiones del shell
+
 proceso_bg procesos_bg[MAX_BG_P];
 
 void init_procesos_bg() {
@@ -31,9 +40,11 @@ void mostrar_terminacion(int status, const char* comando) {
     if (WIFEXITED(status)) {
         // WEXITSTATUS obtiene el código de salida del proceso
         int exit_status = WEXITSTATUS(status);
-        if (exit_status == 1) {
+        if (exit_status == 0) {
+            // Éxito POSIX: 0 significa correcto
             printf("DONE\nProceso '%s' terminado con éxito\n", comando);
         } else {
+            // Código de error distinto de 0
             printf("EXIT %d\nProceso '%s' terminado con error\n", exit_status, comando);
         }
     // WIFSIGNALED verifica si el proceso terminó debido a una señal
@@ -44,27 +55,20 @@ void mostrar_terminacion(int status, const char* comando) {
 }
 
 
-void verificar_procesos_bg() {
-    int status;
-    for (int i = 0; i < MAX_BG_P; i++) {
-        if (procesos_bg[i].pid != -1) { // Si la posición está ocupada (-1 significa libre)
-            pid_t result = waitpid(procesos_bg[i].pid, &status, WNOHANG); // Verificamos el estado del proceso sin bloquear con WNOHANG
-            if (result == -1) {
-                perror("waitpid");
-            } else if (result > 0) { // El proceso ha terminado y nos ha dado su estado
+void verificar_procesos_bg(int status, pid_t pid) {
+        for (int i = 0; i < MAX_BG_P; i++) {
+            if (procesos_bg[i].pid == pid) {
                 mostrar_terminacion(status, procesos_bg[i].comando);
                 procesos_bg[i].pid = -1; // Marca la posición como libre
                 procesos_bg[i].comando[0] = '\0';
                 procesos_bg[i].status = 0;
-                // Eliminamos cualquier proceso zombie que haya quedado
+                break;
             }
         }
-    }
-    manejar_zombies(); // Limpiamos cualquier zombie que haya quedado
 }
+    
 
-
-// Función no necesaria, pero la dejo ya que fué la primera versión junto a manejar zombies y sirve para eliminar un proceso en específico
+// Función no necesaria, pero la dejo ya que fué la primera versión junto a manejar zombies(aplicada en verificar_procesos_bg()) y sirve para eliminar un proceso en específico
 // La función verificar_procesos_bg() es más eficiente ya que elimina cualquier proceso terminado y maneja zombies.
 void eliminar_proceso_bg(pid_t pid) {
     for (int i = 0; i < MAX_BG_P; i++) {
@@ -74,12 +78,5 @@ void eliminar_proceso_bg(pid_t pid) {
             procesos_bg[i].status = 0;
             return;
         }
-    }
-}
-
-// Maneja procesos zombies que hayan terminado sin ser verificados.
-void manejar_zombies() {
-    while ((waitpid(-1, NULL, WNOHANG)) > 0) { // Usamos -1 para esperar a cualquier hijo (WNOHANG sirve para no bloquear el proceso).
-        // Continuamos limpiando zombies hasta que no queden, ya que waitpid devuelve 0 si no hay zombies y -1 si hay error o no hay hijos
     }
 }
