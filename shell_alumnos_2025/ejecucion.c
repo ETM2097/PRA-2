@@ -24,11 +24,59 @@ int es_orden_interna(char *orden) {
     return 0;
 }
 
+int check_env(char** cd_ant, int minus){
+    // Esta función va a ser usada para modificar el vector de strings cd_ant, que contiene el directorio actual y el anterior
+    // cd_ant[1] es el directorio actual y cd_ant[0] el anterior, conocemos como el actual al que se ha cambiado más recientemente, si no se ha cambiado nunca, estará vacío
+    // Y cd_ant[0] sería el actual en el primer uso, que es el directorio inicial al ejecutar el shell
+    // Nuestro cd, tendrá una opcion minus ('-') para cambiar al directorio anterior, es decir, hace un swap de posiciones y cambia al directorio anterior
+    if (minus){
+        // Primero checkamos que cd_ant[0] no esté vacío, de ser así, no hay directorio previo
+        if (strcmp(cd_ant[0], "") == 0){
+            fprintf(stderr, "No hay directorio previo\n");
+            return ERROR;
+        }
+        else{
+            // Guardamos el directorio donde estamos ahora (cd_ant[1]) en temp
+            char temp[256];
+            strcpy(temp, cd_ant[1]);
+            // Cambiamos al directorio anterior (que está en cd_ant[0])
+            if (chdir(cd_ant[0]) != 0) {
+                perror("chdir");
+                return ERROR;
+            }
+            // Actualizamos cd_ant[1] con el directorio al que acabamos de ir (cd_ant[0])
+            strcpy(cd_ant[1], cd_ant[0]);
+            // Y cd_ant[0] con el directorio donde estábamos (temp)
+            strcpy(cd_ant[0], temp);
+        }
+    }
+    else {
+        // Si no es un swap, es decir, un cambio normal de directorio
+        // Si es el primer uso, cd_ant[1] estará vacío, así que guardamos el directorio actual en cd_ant[1]
+        if (strlen(cd_ant[1]) == 0){
+            // Guardamos el directorio actual en cd_ant[1] si es el primer uso
+            if (getcwd(cd_ant[1], 256) == NULL) {
+                perror("getcwd");
+                return ERROR;
+            }
+            return OK;
+        }
+        // Actualizamos cd_ant[0] con el directorio actual
+        strcpy(cd_ant[0], cd_ant[1]);
+        // Actualizamos cd_ant[1] con el directorio actual
+        if (getcwd(cd_ant[1], 256) == NULL) {
+            perror("getcwd");
+            return ERROR;
+        }
+    }
+    return OK;
+}
+
 // He optado por no usar throw y catch para manejar errores, ya que en C no es común y complica el código innecesariamente
 // En su lugar, las funciones devuelven códigos de error y se usan perror y fprintf para mostrar mensajes de error, perror muestra el mensaje asociado al valor de errno 
 // por lo que es menos personalizable, mientras que fprintf permite mostrar mensajes personalizados en stderr
 
-int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bgnd)
+int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bgnd, char **cd_ant)
 {
     int i;
     pid_t pid;
@@ -41,6 +89,15 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
         redirigir_salida(0);
         switch (caso) {
             case 1: // cd
+                // Guardamos el directorio actual en cd_ant[0] antes de cambiarlo si es el primer uso
+                if (strlen(cd_ant[0]) == 0){
+                    // Guardamos el directorio actual en cd_ant[0] antes de cambiarlo
+                    if (getcwd(cd_ant[0], 256) == NULL) {
+                        perror("getcwd");
+                        cerrar_fd();
+                        return ERROR;
+                    }
+                }
                 if (nargs[0] < 2) {
                     // Si no hay argumento, cambiamos al directorio home
                     const char *home = getenv("HOME");
@@ -56,28 +113,28 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
                         cerrar_fd();
                         return ERROR;
                     }
-                }
-                /*
-                else if (strcmp(args[0][1], "-") == 0) {
-                    // Si el argumento es '-', cambiamos al directorio anterior
-                    if (cd_prev_dir != NULL && *cd_prev_dir != NULL) {
-                        if (chdir(*cd_prev_dir) != 0) {
-                            perror("chdir");
-                            cerrar_fd();
-                            return ERROR;
-                        }
-                    }
-                    else {
-                        fprintf(stderr, "No hay directorio previo\n");
+                    if (check_env(cd_ant, 0) != OK) {
                         cerrar_fd();
                         return ERROR;
                     }
-                }*/
+                }
+                
+                else if (strcmp(args[0][1], "-") == 0) {
+                    // Si el argumento es '-', cambiamos al directorio anterior
+                    if (check_env(cd_ant, 1) != OK) {
+                        cerrar_fd();
+                        return ERROR;
+                    }
+                }
                 else {
                     // chdir cambia el directorio actual del proceso, que es lo que queremos para el comando cd
                     if (chdir(args[0][1]) != 0) {
                         // Usamos perror para mostrar el error específico que ha ocurrido, ya que chdir devuelve -1 en caso de error y cambia errno
                         perror("chdir");
+                        cerrar_fd();
+                        return ERROR;
+                    }
+                    if (check_env(cd_ant, 0) != OK) {
                         cerrar_fd();
                         return ERROR;
                     }
@@ -118,6 +175,16 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
     }
     if (bgnd){
         pid_t pid_f = fork();
+        // Si hay segundo plano, los procesos solo deberán ignorar ciertas señales, SIGINT y SIGQUIT.
+        // EL padre tiene ignoradas esas señales, y los hijos las restauran a default
+        if (pid_f == 0){
+            struct sigaction sa;
+            sa.sa_handler = SIG_DFL;  // Establecer manejador como "default"
+            sigemptyset(&sa.sa_mask);  // Máscara de señales vacía (no bloquear otras señales)
+            sa.sa_flags = 0;  // Sin flags especiales
+            sigaction(SIGINT, &sa, NULL);   
+            sigaction(SIGQUIT, &sa, NULL); 
+        } 
         if (pid_f < 0) {
             // Error al crear el proceso
             perror("fork");
@@ -132,7 +199,17 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
     // Proseguimos a crear los procesos hijos si hay más de una orden o no es un comando interno
     for (int i = 0; i < nordenes; i++) {
         pid_t pid = fork();
-        
+        if (!bgnd && pid == 0){
+            // Restauramos las señales a default si el proceso no es en background
+            struct sigaction sa;
+            sa.sa_handler = SIG_DFL;  // Establecer manejador como "default"
+            sigemptyset(&sa.sa_mask);  // Máscara de señales vacía (no bloquear otras señales)
+            sa.sa_flags = 0;  // Sin flags especiales
+            sigaction(SIGINT, &sa, NULL);   
+            sigaction(SIGQUIT, &sa, NULL);
+            sigaction(SIGTTIN, &sa, NULL);
+            sigaction(SIGTTOU, &sa, NULL);
+        }
         if (pid < 0) {
             // Error al crear el proceso
             perror("fork");

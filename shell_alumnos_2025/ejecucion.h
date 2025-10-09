@@ -41,7 +41,7 @@
 /*******************************************************************/
 
 
-extern int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bgnd);
+extern int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bgnd, char **cd_ant);
 
 #endif
 

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <stdbool.h>
 #include "profe.h"
 #include "visualizado.h"
 #include "background_check.h"
@@ -27,7 +28,7 @@
 // Declaraciones de funciones locales
 //
 int leerLinea( char *linea, int maxLinea );
-
+bool user_selection(void);
 
 //
 // Prog. ppal.
@@ -36,17 +37,43 @@ int main(int argc, char * argv[])
 {
     
   char line[255];
+  // Declaración de cd_ant como array de punteros, creamos dos buffers para almacenar los directorios
+  char cd_ant_buf0[256] = "";
+  char cd_ant_buf1[256] = "";
+  char *cd_ant[2] = {cd_ant_buf0, cd_ant_buf1};
   int res;
   char **m_ordenes;
   char ***m_argumentos;
   int *m_num_arg;
   int m_n;
+
   
+  bool selection = user_selection();
+
   while(1)
   {
     setlocale(LC_ALL, "");
     while(1)
     {
+      // Configuramos el shell para ignorar señales
+      // Esta estructura nos permite definir cómo manejar señales específicas, viene dada en <signal.h> y tiene como parámetros:
+      // sa_handler: función que maneja la señal, en este caso SIG_IGN para ignorarla
+      // sa_mask: conjunto de señales que se bloquean durante la ejecución
+      // sa_flags: opciones adicionales para el manejo de la señal, en este caso 0 (ninguna)
+      struct sigaction sa;
+      sa.sa_handler = SIG_IGN;  // Ignora la señal
+      sigemptyset(&sa.sa_mask);  // Inicializamos máscara de señales vacía, esto es necesario para evitar que se bloqueen otras señales
+      sa.sa_flags = 0;  // Marcamos que no hay flags
+      
+      // Ignorar SIGINT (Ctrl+C)
+      sigaction(SIGINT, &sa, NULL);
+      // Ignorar SIGQUIT (Ctrl+\)
+      sigaction(SIGQUIT, &sa, NULL);
+      // Ignorar SIGTTIN (lectura en background)
+      sigaction(SIGTTIN, &sa, NULL);
+      // Ignorar SIGTTOU (escritura en background)
+      sigaction(SIGTTOU, &sa, NULL);
+
       do
       {
           res=leerLinea(line,MAXLINE);    
@@ -71,7 +98,7 @@ int main(int argc, char * argv[])
             int stdin_backup = dup(STDIN_FILENO);
             
             if (pipeline(m_n,fich_entrada(),fich_salida(),es_append(),es_background())==OK)
-                      ejecutar(m_n,m_num_arg,m_ordenes,m_argumentos,es_background());
+                      ejecutar(m_n,m_num_arg,m_ordenes,m_argumentos,es_background(), cd_ant);
             
             // Restaurar stdout original para el prompt
             dup2(stdout_backup, STDOUT_FILENO);
@@ -79,7 +106,9 @@ int main(int argc, char * argv[])
             close(stdout_backup);
             close(stdin_backup);
           }
-        visualizar_bonito();
+        if (selection){
+          visualizar_bonito();
+        }
        }
     }    
   return 0;
@@ -158,3 +187,28 @@ int leerLinea( char *linea, int maxLinea ){
   return -1;
 }
 
+bool user_selection(void){
+  bool selection = true;
+  char input[3] = "";
+  printf("Este programa es una versión de un Shell simple creado en prácticas de Sistemas Operativos.\n");
+  printf("Cuenta con funcionalidades básicas como ejecución de comandos (internos y externos), tuberías, redirecciones, manejo de procesos en segundo plano y de señales.\n");
+  printf("También cuenta con una opción de visualización de los comandos ejecutados en el shell y las redirecciones realizadas para poder observar las acciones realizadas.\n");
+  printf("\033[1;32m¿Desea visualizar las órdenes ejecutadas y las redirecciones realizadas? (s/n): \033[0m");
+  while(strcmp(input, "s\n") != 0 && strcmp(input, "n\n") != 0 && strcmp(input, "S\n") != 0 && strcmp(input, "N\n") != 0){
+    // Usamos fgets para leer la entrada del usuario, debido a que nos permite controlar la entrada y evitar desbordamientos de buffer
+    fgets(input, sizeof(input), stdin);
+    if (strcmp(input, "s\n") == 0 || strcmp(input, "S\n") == 0){
+      selection = true;
+      break;
+    }
+    else if (strcmp(input, "n\n") == 0 || strcmp(input, "N\n") == 0){
+      selection = false;
+      break;
+    }
+    else{
+      printf("Entrada no válida. Por favor, introduzca 's' para sí o 'n' para no: ");
+    }
+  
+  }
+  return selection;
+}

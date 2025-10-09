@@ -60,10 +60,19 @@ int pipeline(int nordenes, char *infile, char *outfile, int append, int bgnd)
                 }
                 red_ordenes[i].entrada = fd_in;
             } 
-            else if (bgnd == 1) {
+            else if (bgnd == 1 && strcmp(infile, "") == 0) {
                 int fd_in = open("/dev/null", O_RDONLY);
                 if (fd_in < 0) {
                     perror("open /dev/null");
+                    return ERROR;
+                }
+                red_ordenes[i].entrada = fd_in;
+            }
+            else if(strcmp(infile, "") != 0 && i == 0){
+                // Si hay un archivo de entrada y es el primer comando
+                int fd_in = open(infile, O_RDONLY);
+                if (fd_in < 0) {
+                    perror("open infile");
                     return ERROR;
                 }
                 red_ordenes[i].entrada = fd_in;
