@@ -29,7 +29,7 @@
 //
 int leerLinea( char *linea, int maxLinea );
 bool user_selection(void);
-
+void set_signals(void);
 //
 // Prog. ppal.
 // 
@@ -55,25 +55,7 @@ int main(int argc, char * argv[])
     setlocale(LC_ALL, "");
     while(1)
     {
-      // Configuramos el shell para ignorar señales
-      // Esta estructura nos permite definir cómo manejar señales específicas, viene dada en <signal.h> y tiene como parámetros:
-      // sa_handler: función que maneja la señal, en este caso SIG_IGN para ignorarla
-      // sa_mask: conjunto de señales que se bloquean durante la ejecución
-      // sa_flags: opciones adicionales para el manejo de la señal, en este caso 0 (ninguna)
-      struct sigaction sa;
-      sa.sa_handler = SIG_IGN;  // Ignora la señal
-      sigemptyset(&sa.sa_mask);  // Inicializamos máscara de señales vacía, esto es necesario para evitar que se bloqueen otras señales
-      sa.sa_flags = 0;  // Marcamos que no hay flags
-      
-      // Ignorar SIGINT (Ctrl+C)
-      sigaction(SIGINT, &sa, NULL);
-      // Ignorar SIGQUIT (Ctrl+\)
-      sigaction(SIGQUIT, &sa, NULL);
-      // Ignorar SIGTTIN (lectura en background)
-      sigaction(SIGTTIN, &sa, NULL);
-      // Ignorar SIGTTOU (escritura en background)
-      sigaction(SIGTTOU, &sa, NULL);
-
+      set_signals();
       do
       {
           res=leerLinea(line,MAXLINE);    
@@ -211,4 +193,17 @@ bool user_selection(void){
   
   }
   return selection;
+}
+
+void set_signals(void){
+    // Ignoramos las señales SIGINT y SIGQUIT en el shell
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;  // Establecer el manejador como "ignorar"
+    sigemptyset(&sa.sa_mask);  // Máscara de señales vacía (no bloquear otras señales)
+    sa.sa_flags = 0;  // Sin flags especiales
+    sigaction(SIGINT, &sa, NULL);   
+    sigaction(SIGQUIT, &sa, NULL);
+    // Ignoramos las señales SIGTTIN y SIGTTOU para evitar que el shell se detenga al intentar leer o escribir en la terminal
+    sigaction(SIGTTIN, &sa, NULL);
+    sigaction(SIGTTOU, &sa, NULL);
 }

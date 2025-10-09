@@ -59,7 +59,7 @@ void visualizar_bonito(void){
     snprintf(buffer, sizeof(buffer), "%s La redirección de salida es -> %s %s", "\U0001F4E5", fich_salida(), "\U0001F4E5");
     print_aligned(buffer);
   } else {
-    snprintf(buffer, sizeof(buffer), "%s No hay redirección de salida %s", "❌", "❌");
+    snprintf(buffer, sizeof(buffer), "%s No hay redirección de salida  %s", "❌", "❌");
     print_aligned(buffer);
   }
   print_aligned("");
