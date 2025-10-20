@@ -11,14 +11,14 @@
 #define MAX_BG_P 10
 
 typedef struct {
-    pid_t pid[10]; // PID del proceso
-    char comando[10][256]; // Comando del proceso
-    int status[10]; // Estado del proceso (0: en ejecución, 1: terminado, 2: error, 3: Terminado por señal)
+    pid_t pid; // PID del proceso
+    char comando[256]; // Comando del proceso
+    int status; // Estado del proceso (0: en ejecución, 1: terminado, 2: error, 3: Terminado por señal)
 } proceso_bg;
 
 // Declaración externa del array de procesos, extern sirve para indicar que la variable se define en otro archivo
 // y evitar múltiples definiciones al incluir este header en varios archivos
-extern proceso_bg procesos_bg;
+extern proceso_bg procesos_bg[MAX_BG_P];
 
 void init_procesos_bg();
 void verificar_procesos_bg();

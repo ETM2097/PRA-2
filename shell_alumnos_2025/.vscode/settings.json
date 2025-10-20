@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "redireccion.h": "c"
+    },
+    "ros.distro": "jazzy"
+}
