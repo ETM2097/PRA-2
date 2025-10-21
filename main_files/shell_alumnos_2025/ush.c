@@ -6,14 +6,18 @@
  |     Asignatura :  SOP-GIIROB                        |                               
  |     Descripción :                                   |
  +-----------------------------------------------------*/
+#define _POSIX_C_SOURCE 199309L
 #include "defines.h"
 #include "analizador.h"
 #include "redireccion.h"
 #include "ejecucion.h"
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <time.h>  
 #include "profe.h"
 #include "visualizado.h"
 #include "background_check.h"
@@ -30,6 +34,7 @@
 int leerLinea( char *linea, int maxLinea );
 bool user_selection(void);
 void set_signals(void);
+static void matar_hijos_noblock(void);
 //
 // Prog. ppal.
 // 
@@ -56,9 +61,10 @@ int main(int argc, char * argv[])
     while(1)
     {
       set_signals();
+      matar_hijos_noblock(); //Usamos para recuperar al supervisor de los procesos en background terminados
       do
       {
-          res=leerLinea(line,MAXLINE);    
+          res=leerLinea(line,MAXLINE);
           if (res==-2) {
         		fprintf(stdout,"logout\n");
         		exit(0);
@@ -74,20 +80,14 @@ int main(int argc, char * argv[])
          m_ordenes=get_ordenes();
          m_argumentos=get_argumentos();
          if(m_n>0)
-         {
-            // Guardar stdout original antes de redirecciones
-            int stdout_backup = dup(STDOUT_FILENO);
-            int stdin_backup = dup(STDIN_FILENO);
-            
-            if (pipeline(m_n,fich_entrada(),fich_salida(),es_append(),es_background())==OK)
-                      ejecutar(m_n,m_num_arg,m_ordenes,m_argumentos,es_background(), cd_ant);
-            
-            // Restaurar stdout original para el prompt
-            dup2(stdout_backup, STDOUT_FILENO);
-            dup2(stdin_backup, STDIN_FILENO);
-            close(stdout_backup);
-            close(stdin_backup);
+         {   
+          int back = es_background();
+          if (pipeline(m_n,fich_entrada(),fich_salida(),es_append(),es_background())==OK)
+                      ejecutar(m_n,m_num_arg,m_ordenes,m_argumentos,back, cd_ant);  
           }
+        dup2(STDIN_FILENO, STDIN_FILENO);
+        dup2(STDOUT_FILENO, STDOUT_FILENO);
+        dup2(STDERR_FILENO, STDERR_FILENO);
         if (selection){
           visualizar_bonito();
         }
@@ -134,7 +134,8 @@ int leerLinea( char *linea, int maxLinea ){
   // Comprobamos que podemos obtener el directorio actual (getcwd devuelve NULL si hay error)
   if (getcwd(cwd, sizeof(cwd)) != NULL) {
       // Mostramos el prompt por el terminal, con colores y sumamos a cwd la longitud de home para que muestre ~ en lugar del path completo
-      printf("\033[1;32m%s\033[0m:~\033[1;34m%s\033[0m$ ", PROMPT, cwd + strlen(home)); 
+    printf("\033[1;32m%s\033[0m:~\033[1;34m%s\033[0m$ ", PROMPT, cwd + strlen(home));
+    fflush(stdout); // fuerza mostrar el prompt inmediatamente
   } 
   // Si hay error, mostramos un mensaje
   else {
@@ -206,4 +207,9 @@ void set_signals(void){
     // Ignoramos las señales SIGTTIN y SIGTTOU para evitar que el shell se detenga al intentar leer o escribir en la terminal
     sigaction(SIGTTIN, &sa, NULL);
     sigaction(SIGTTOU, &sa, NULL);
+}
+
+static void matar_hijos_noblock(void) {
+    int status;
+    while (waitpid(-1, &status, WNOHANG) > 0) {}
 }

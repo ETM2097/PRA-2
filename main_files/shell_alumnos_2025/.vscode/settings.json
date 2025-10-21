@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "redireccion.h": "c"
-    }
+        "redireccion.h": "c",
+        "stdbool.h": "c"
+    },
+    "ros.distro": "jazzy"
 }

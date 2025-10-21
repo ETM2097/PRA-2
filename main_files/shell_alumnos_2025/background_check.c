@@ -42,16 +42,18 @@ void mostrar_terminacion(int status, const char* comando) {
         int exit_status = WEXITSTATUS(status);
         if (exit_status == 0) {
             // Éxito POSIX: 0 significa correcto
-            printf("DONE\nProceso '%s' terminado con éxito\n", comando);
+            // Imprimir en una nueva línea para no pisar el prompt actual
+            printf("\nDONE\nProceso '%s' terminado con éxito\n", comando);
         } else {
             // Código de error distinto de 0
-            printf("EXIT %d\nProceso '%s' terminado con error\n", exit_status, comando);
+            printf("\nEXIT %d\nProceso '%s' terminado con error\n", exit_status, comando);
         }
     // WIFSIGNALED verifica si el proceso terminó debido a una señal
     } else if (WIFSIGNALED(status)) {
         // WTERMSIG obtiene el número de la señal que causó la terminación
-        printf("KILLED\nProceso '%s' terminado por señal %d\n", comando, WTERMSIG(status));
+        printf("\nKILLED\nProceso '%s' terminado por señal %d\n", comando, WTERMSIG(status));
     }
+    fflush(stdout);
 }
 
 

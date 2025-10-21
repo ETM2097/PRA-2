@@ -85,6 +85,15 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
     // Manejamos si es un comando interno
     int caso = es_orden_interna(ordenes[0]);
     if (nordenes == 1 && caso != 0) {
+        // Guardamos stdin/stdout actuales para restaurarlos tras ejecutar el interno
+        int saved_stdin = dup(STDIN_FILENO);
+        int saved_stdout = dup(STDOUT_FILENO);
+        if (saved_stdin == -1 || saved_stdout == -1) {
+            perror("dup");
+            cerrar_fd();
+            return ERROR;
+        }
+        // Aplicamos las redirecciones calculadas por pipeline
         redirigir_entrada(0);
         redirigir_salida(0);
         switch (caso) {
@@ -170,6 +179,16 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
                 printf("\n");
                 break;
         }
+        // Vaciar buffers y restaurar stdin/stdout originales
+        fflush(stdout);
+        if (dup2(saved_stdin, STDIN_FILENO) == -1) {
+            perror("dup2 restauracion stdin");
+        }
+        if (dup2(saved_stdout, STDOUT_FILENO) == -1) {
+            perror("dup2 restauracion stdout");
+        }
+        close(saved_stdin);
+        close(saved_stdout);
         cerrar_fd();
         return OK;
     }
@@ -241,6 +260,10 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
                 strcpy(cmds[i], cmd);
                 pids[i] = pid;
             }
+            else { 
+                // En foreground almacenamos los pid solamente para esperar a los hijos
+                pids[i] = pid;
+            }
         }
     }
     
@@ -248,7 +271,7 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
     cerrar_fd();
 
     // Si es background, ha llegado aquí el proceso supervisor, que manejará la espera y mostrará los mensajes de terminación de sus hijos
-        if (bgnd) {
+    if (bgnd) {
             int status;
             int cont = 0;
             while(cont < nordenes){
@@ -263,13 +286,17 @@ int ejecutar (int nordenes , int *nargs , char **ordenes , char ***args , int bg
                 cont++;
             }
             exit(0);
-        }
+    }
     // Si no es en background, el padre espera a que terminen todos los hijos
-        else {
-            for (int k = 0; k < nordenes; k++) {
-                wait(NULL);
+    else {
+        for (int k = 0; k < nordenes; k++) {
+            if (waitpid(pids[k], NULL, 0) == -1) {
+                perror("wait");
+                cerrar_fd();
+                return ERROR;
             }
-        }   
+        }
+    }   
     // Return OK si todo ha ido bien, solo debería llegar aquí el proceso padre
     return OK;
 } 
